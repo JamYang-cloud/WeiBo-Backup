@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>微博备份工具 — Weibo Archiver</title>
+<!-- JSZip for ZIP export (requires internet on first load) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif;
+  background: #f5f5f5; color: #333; line-height: 1.6;
+}
+.header {
+  background: linear-gradient(135deg, #ff8200, #ff5500);
+  color: #fff; padding: 24px 32px;
+}
+.header h1 { font-size: 24px; margin-bottom: 6px; }
+.header p { font-size: 14px; opacity: 0.85; }
+.container { max-width: 960px; margin: 0 auto; padding: 20px; }
+.section {
+  background: #fff; border-radius: 10px; padding: 24px;
+  margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+.section h2 {
+  font-size: 18px; margin-bottom: 16px; padding-bottom: 10px;
+  border-bottom: 2px solid #ff8200; color: #333;
+}
+.form-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.form-group { flex: 1; min-width: 200px; }
+.form-group label {
+  display: block; font-size: 13px; font-weight: 600;
+  margin-bottom: 4px; color: #555;
+}
+.form-group input, .form-group select {
+  width: 100%; padding: 8px 10px; border: 1px solid #ddd;
+  border-radius: 6px; font-size: 14px; outline: none;
+  transition: border-color 0.2s;
+}
+.form-group input:focus { border-color: #ff8200; }
+.form-group .hint { font-size: 12px; color: #999; margin-top: 3px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 20px; border: none; border-radius: 6px;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: all 0.2s; text-decoration: none;
+}
+.btn-primary { background: #ff8200; color: #fff; }
+.btn-primary:hover { background: #e67500; }
+.btn-success { background: #28a745; color: #fff; }
+.btn-success:hover { background: #218838; }
+.btn-secondary { background: #6c757d; color: #fff; }
+.btn-secondary:hover { background: #5a6268; }
+.btn-outline { background: transparent; color: #ff8200; border: 1.5px solid #ff8200; }
+.btn-outline:hover { background: #fff5ed; }
+.btn-sm { padding: 6px 14px; font-size: 13px; }
+.btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+
+.code-block {
+  background: #1e1e1e; color: #d4d4d4; border-radius: 8px;
+  padding: 16px; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px; line-height: 1.5; overflow-x: auto;
+  white-space: pre-wrap; word-break: break-all;
+  max-height: 400px; overflow-y: auto; position: relative;
+}
+.copy-btn {
+  position: absolute; top: 8px; right: 8px;
+  padding: 4px 12px; background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;
+  color: #ccc; font-size: 12px; cursor: pointer;
+}
+.copy-btn:hover { background: rgba(255,255,255,0.2); }
+
+.file-input { margin: 10px 0; }
+.file-input input[type="file"] { display: none; }
+.file-label {
+  display: inline-block; padding: 12px 24px; background: #f0f0f0;
+  border: 2px dashed #ccc; border-radius: 8px; cursor: pointer;
+  text-align: center; width: 100%; font-size: 14px; color: #666;
+  transition: all 0.2s;
+}
+.file-label:hover { border-color: #ff8200; color: #ff8200; background: #fff8f2; }
+.file-label.has-file { border-color: #28a745; color: #28a745; background: #f0fff4; }
+
+.status-bar {
+  background: #e8f4fd; border: 1px solid #b8d4f0; border-radius: 6px;
+  padding: 10px 14px; font-size: 13px; margin: 10px 0; display: none;
+}
+.status-bar.success { background: #d4edda; border-color: #c3e6cb; display: block; }
+.status-bar.error { background: #f8d7da; border-color: #f5c6cb; display: block; }
+.status-bar.info { background: #d1ecf1; border-color: #bee5eb; display: block; }
+
+.output-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 12px 0; }
+.stat-card { background: #f8f9fa; border-radius: 8px; padding: 14px; text-align: center; }
+.stat-card .num { font-size: 28px; font-weight: 700; color: #ff8200; }
+.stat-card .label { font-size: 12px; color: #888; margin-top: 2px; }
+
+.last-backup-info {
+  background: #f8f9fa; border-radius: 8px; padding: 12px 16px; margin: 10px 0;
+  font-size: 13px; display: flex; justify-content: space-between; align-items: center;
+}
+.last-backup-info .time { font-weight: 600; }
+
+.tab-bar { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid #eee; }
+.tab-item {
+  padding: 10px 20px; cursor: pointer; font-size: 14px; font-weight: 500;
+  color: #888; border-bottom: 2px solid transparent; margin-bottom: -2px;
+  transition: all 0.2s;
+}
+.tab-item.active { color: #ff8200; border-bottom-color: #ff8200; }
+.tab-item:hover { color: #ff8200; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.progress-bar {
+  width: 100%; height: 6px; background: #eee; border-radius: 3px;
+  margin: 10px 0; overflow: hidden; display: none;
+}
+.progress-bar .fill {
+  height: 100%; background: linear-gradient(90deg, #ff8200, #ff5500);
+  border-radius: 3px; transition: width 0.3s; width: 0%;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📱 微博备份工具 — Weibo Archiver</h1>
+  <p>参数配置 → 生成 Console 代码 → 浏览器提取 → JSON 转 Markdown</p>
+</div>
+
+<div class="container">
+
+<!-- Tab Bar -->
+<div class="tab-bar">
+  <div class="tab-item active" onclick="switchTab('extract')">1️⃣ 提取参数配置</div>
+  <div class="tab-item" onclick="switchTab('convert')">2️⃣ JSON 转 Markdown</div>
+  <div class="tab-item" onclick="switchTab('help')">❓ 使用说明</div>
+</div>
+
+<!-- ====== Tab 1: 提取参数配置 ====== -->
+<div id="tab-extract" class="tab-content active">
+
+<div class="section">
+  <h2>📋 基本参数</h2>
+  <div class="form-row">
+    <div class="form-group">
+      <label>微博用户 UID</label>
+      <input type="text" id="uid" value="1041241542" placeholder="例: 1041241542">
+      <div class="hint">用户主页 URL 中的数字，如 weibo.com/u/1041241542</div>
+    </div>
+    <div class="form-group">
+      <label>抓取页数</label>
+      <input type="number" id="maxPages" value="50" min="1" max="200">
+      <div class="hint">每页约 15~20 条，50 页 ≈ 1000 条</div>
+    </div>
+    <div class="form-group">
+      <label>滚动间隔（毫秒）</label>
+      <input type="number" id="scrollDelay" value="3000" min="1000" max="10000">
+      <div class="hint">间隔越短越快，但易触发风控。建议 3000</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>📅 时间范围（可选）</h2>
+  <div class="form-row">
+    <div class="form-group">
+      <label>起始日期</label>
+      <input type="date" id="startDate">
+      <div class="hint">留空表示不限制</div>
+    </div>
+    <div class="form-group">
+      <label>截止日期</label>
+      <input type="date" id="endDate">
+      <div class="hint">留空表示到今天</div>
+    </div>
+  </div>
+
+  <h3 style="font-size:14px; margin:12px 0 8px;">🔄 增量备份</h3>
+  <div id="lastBackupInfo" class="last-backup-info">
+    <span>📦 上次备份：<span class="time" id="lastBackupDisplay">从未备份</span></span>
+    <button class="btn btn-secondary btn-sm" onclick="setNowAsLastBackup()">设为当前时间</button>
+    <button class="btn btn-outline btn-sm" onclick="clearLastBackup()">清除记录</button>
+  </div>
+  <div class="form-group">
+    <label>仅抓取上次备份以来的微博</label>
+    <select id="incrementalOnly">
+      <option value="yes">✅ 是，只抓取增量</option>
+      <option value="no">❌ 否，抓取全部</option>
+    </select>
+  </div>
+</div>
+
+<div class="section" style="position:relative;">
+  <h2>📋 生成的 Console 代码</h2>
+  <p style="font-size:13px; color:#888; margin-bottom:10px;">
+    复制以下代码，在 Chrome 浏览器中按 F12 → Console → 粘贴 → Enter
+  </p>
+  <div style="position:relative;">
+    <div class="code-block" id="generatedCode">加载中...</div>
+    <button class="copy-btn" onclick="copyCode()">📋 复制</button>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-primary" onclick="generateCode()">🔄 重新生成</button>
+    <div id="copyStatus" style="font-size:13px; color:#28a745; align-self:center; display:none;">✅ 已复制！</div>
+  </div>
+</div>
+
+</div><!-- end tab-extract -->
+
+<!-- ====== Tab 2: JSON 转 Markdown ====== -->
+<div id="tab-convert" class="tab-content">
+
+<div class="section">
+  <h2>📤 1. 上传 JSON 文件</h2>
+  <p style="font-size:13px; color:#888; margin-bottom:10px;">
+    上传从 Chrome Console 中下载的 JSON 文件（weibo_xxx.json）
+  </p>
+  <div class="file-input">
+    <label class="file-label" id="fileLabel">
+      <span id="fileLabelText">📁 点击选择 JSON 文件，或拖拽到此处</span>
+    </label>
+    <input type="file" id="jsonFileInput" accept=".json" onchange="handleFileUpload(event)">
+  </div>
+
+  <div id="uploadStatus" class="status-bar"></div>
+
+  <div id="fileStats" style="display:none;">
+    <div class="output-stats" id="statsContainer"></div>
+  </div>
+</div>
+
+<div class="section" id="convertSection" style="display:none;">
+  <h2>⚙️ 2. 转换参数</h2>
+  <div class="form-row">
+    <div class="form-group">
+      <label>输出目录名称</label>
+      <input type="text" id="outputDir" value="微博备份_导出" placeholder="目录名">
+      <div class="hint">将在下载的 ZIP 中以此名称创建目录</div>
+    </div>
+    <div class="form-group">
+      <label>新序号</label>
+      <input type="text" id="outputSeq" placeholder="自动检测">
+      <div class="hint">留空自动从 JSON 中的最小日期开始编号</div>
+    </div>
+  </div>
+
+  <div id="lastSeqInfo" class="last-backup-info" style="display:none;"></div>
+
+  <h3 style="font-size:14px; margin:12px 0 8px;">📐 格式选项</h3>
+  <div class="form-row">
+    <div class="form-group">
+      <label>文件名格式</label>
+      <select id="filenameFormat">
+        <option value="standard">微博-YYYY.MM.DD-序号.md</option>
+        <option value="simple">YYYY.MM.DD-序号.md</option>
+        <option value="numbered">序号-YYYY.MM.DD.md</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>日期签名</label>
+      <select id="dateSignature">
+        <option value="append">追加到正文末尾</option>
+        <option value="none">不追加</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-success" onclick="convertToMarkdown()">📦 生成并下载 ZIP</button>
+  </div>
+
+  <div id="convertStatus" class="status-bar"></div>
+  <div id="convertProgress" class="progress-bar"><div class="fill" id="progressFill"></div></div>
+</div>
+
+</div><!-- end tab-convert -->
+
+<!-- ====== Tab 3: 使用说明 ====== -->
+<div id="tab-help" class="tab-content">
+
+<div class="section">
+  <h2>📖 完整使用指南</h2>
+
+  <h3 style="font-size:15px; margin:16px 0 8px;">🔧 什么是 UID？</h3>
+  <p style="font-size:14px; color:#555;">
+    每个微博用户有一个唯一的数字 ID（UID）。打开用户主页，URL 中的数字就是 UID：<br>
+    <code>https://weibo.com/u/<strong>1041241542</strong></code>
+  </p>
+
+  <h3 style="font-size:15px; margin:16px 0 8px;">📋 如何使用 Console 执行 JS 代码？</h3>
+  <ol style="font-size:14px; color:#555; padding-left:20px; line-height:2;">
+    <li>在 <strong>Chrome 浏览器</strong> 中登录微博（weibo.com）</li>
+    <li>打开目标用户的个人主页：<code>https://weibo.com/u/{UID}</code></li>
+    <li>按键盘 <strong>F12</strong> 打开开发者工具</li>
+    <li>点击顶部 <strong>Console（控制台）</strong> 标签</li>
+    <li>复制上方生成的代码，粘贴到 Console 中</li>
+    <li>如果粘贴被阻止，先输入 <code>allow pasting</code> 后按 Enter</li>
+    <li>按 <strong>Enter</strong> 键执行</li>
+    <li>等待脚本运行完成，会自动下载一个 JSON 文件</li>
+  </ol>
+
+  <h3 style="font-size:15px; margin:16px 0 8px;">⚠️ 环境要求</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:14px; color:#555; margin:8px 0;">
+    <tr style="border-bottom:1px solid #eee;">
+      <td style="padding:8px 12px; font-weight:600;">操作系统</td>
+      <td style="padding:8px 12px;">Windows / macOS / Linux（只要有 Chrome 浏览器即可）</td>
+    </tr>
+    <tr style="border-bottom:1px solid #eee;">
+      <td style="padding:8px 12px; font-weight:600;">浏览器</td>
+      <td style="padding:8px 12px;">Chrome（推荐）、Edge、Firefox 均可</td>
+    </tr>
+    <tr style="border-bottom:1px solid #eee;">
+      <td style="padding:8px 12px; font-weight:600;">其他软件</td>
+      <td style="padding:8px 12px;">完全不需要！本工具就是一个 HTML 文件，双击打开即可</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 12px; font-weight:600;">网络</td>
+      <td style="padding:8px 12px;">需要互联网（访问微博和加载 JSZip 库）</td>
+    </tr>
+  </table>
+
+  <h3 style="font-size:15px; margin:16px 0 8px;">🚫 已知局限性</h3>
+  <ul style="font-size:14px; color:#555; padding-left:20px; line-height:2;">
+    <li><strong>图片无法自动提取</strong> — 微博 API 在列表接口中不返回图片数据，且 DOM 提取方式不可靠。您需要手动保存图片</li>
+    <li><strong>无法在手机上运行</strong> — 需要在桌面版 Chrome 中执行</li>
+    <li><strong>需保持登录状态</strong> — 提取前需确保微博已登录</li>
+    <li><strong>可能触发风控</strong> — 抓取过多过快可能导致暂时封禁，建议保持 3 秒以上间隔</li>
+    <li><strong>长文本自动展开</strong> — 脚本会自动调用展开长文本的 API，但极少数情况下可能失败</li>
+    <li><strong>仅备份文字内容</strong> — 视频、投票、定位等富媒体内容暂不支持</li>
+    <li><strong>浏览器 JSZip 依赖</strong> — ZIP 导出功能需要联网加载 JSZip 库</li>
+  </ul>
+
+  <h3 style="font-size:15px; margin:16px 0 8px;">📂 输出格式说明</h3>
+  <div class="code-block" style="max-height:250px; margin:8px 0;">每个 Markdown 文件格式：
+---
+type: 微博
+date: 2026.05.28
+tags: []
+description: ""
+---
+
+微博正文内容... - 2026.05.28</div>
+
+  <h3 style="font-size:15px; margin:16px 0 8px;">🔄 增量备份说明</h3>
+  <p style="font-size:14px; color:#555;">
+    本工具使用浏览器 localStorage 记录上次备份时间。当启用"增量备份"时，生成的 Console 代码会
+    自动跳过上次备份时间之前的微博，只提取新内容。清除浏览器数据会丢失记录。
+  </p>
+</div>
+
+</div><!-- end tab-help -->
+
+</div><!-- end container -->
+
+<script>
+// ====== Tab 切换 ======
+function switchTab(name) {
+  document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector('.tab-item[onclick*="' + name + '"]').classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ====== 上次备份管理 ======
+function loadLastBackup() {
+  var t = localStorage.getItem('weibo_last_backup');
+  if (t) {
+    var d = new Date(t);
+    document.getElementById('lastBackupDisplay').textContent = d.toLocaleString('zh-CN');
+  } else {
+    document.getElementById('lastBackupDisplay').textContent = '从未备份';
+  }
+}
+function setNowAsLastBackup() {
+  localStorage.setItem('weibo_last_backup', new Date().toISOString());
+  loadLastBackup();
+  showStatus('lastBackupStatus', '✅ 已记录备份时间', 'success');
+}
+function clearLastBackup() {
+  localStorage.removeItem('weibo_last_backup');
+  loadLastBackup();
+}
+loadLastBackup();
+
+// ====== 生成 Console 代码 ======
+function generateCode() {
+  var uid = document.getElementById('uid').value.trim();
+  var maxPages = parseInt(document.getElementById('maxPages').value) || 50;
+  var scrollDelay = parseInt(document.getElementById('scrollDelay').value) || 3000;
+  var startDate = document.getElementById('startDate').value;
+  var endDate = document.getElementById('endDate').value;
+  var incremental = document.getElementById('incrementalOnly').value === 'yes';
+  var lastBackup = localStorage.getItem('weibo_last_backup') || '';
+
+  if (!uid || !/^\d+$/.test(uid)) {
+    document.getElementById('generatedCode').textContent = '⚠️ 请输入有效的数字 UID';
+    return;
+  }
+
+  // 生成 JS 代码 — 包含所有过滤逻辑
+  var code = `/*
+ * 微博备份脚本 — 自动生成
+ * UID: ${uid} | 页数: ${maxPages} | 间隔: ${scrollDelay}ms
+${startDate ? ' * 起始日期: ' + startDate : ''}
+${endDate ? ' * 截止日期: ' + endDate : ''}
+${incremental && lastBackup ? ' * 增量备份：自 ' + lastBackup.slice(0,10) : ''}
+ */
+(async function(){
+  var MAX_PAGES=${maxPages}, SCROLL_DELAY=${scrollDelay};
+  var START_DATE="${startDate||''}", END_DATE="${endDate||''}";
+  var LAST_BACKUP="${incremental && lastBackup ? lastBackup : ''}";
+  var uid="${uid}";
+
+  console.log('%c微博备份工具 - UID:'+uid,'font-size:16px;font-weight:bold;color:#ff8200;');
+  function getCookie(n){var m=document.cookie.match(new RegExp('(^| )'+n+'=([^;]+)'));return m?m[2]:'';}
+  function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+  function parseDate(t){
+    if(!t)return'';var p=t.split(' ');
+    if(p.length>=6){var m={Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+    return p[5]+'.'+(m[p[1]]||'00')+'.'+p[2].padStart(2,'0');}return'';
+  }
+  function inRange(t){
+    var d=parseDate(t);
+    if(START_DATE && d<START_DATE)return false;
+    if(END_DATE && d>END_DATE)return false;
+    if(LAST_BACKUP && d<=parseDate(LAST_BACKUP))return false;
+    return true;
+  }
+
+  var xsrf=getCookie('XSRF-TOKEN');
+  console.log('开始抓取，共'+MAX_PAGES+'页...');
+  var allPosts=[];
+
+  async function fetchPage(p){
+    try{
+      var r=await fetch('/ajax/statuses/mymblog?uid='+uid+'&page='+p+'&feature=0',{
+        credentials:'include',headers:{'X-Requested-With':'XMLHttpRequest','X-XSRF-TOKEN':xsrf,'Referer':location.href}
+      });
+      if(!r.ok)return null;
+      var d=await r.json();return d.ok===1?d:null;
+    }catch(e){return null;}
+  }
+
+  async function fetchLongText(id){
+    try{
+      var r=await fetch('/ajax/statuses/longtext?id='+id,{
+        credentials:'include',headers:{'X-Requested-With':'XMLHttpRequest','X-XSRF-TOKEN':xsrf}
+      });
+      if(!r.ok)return null;
+      var d=await r.json();
+      return(d.ok===1&&d.data&&d.data.longTextContent)?d.data.longTextContent.replace(/<[^>]*>/g,'').trim():null;
+    }catch(e){return null;}
+  }
+
+  function isLong(item){
+    if(item.isLongText===true)return true;
+    var t=(item.text_raw||item.text||'');
+    if(t.indexOf('...')>=0||t.indexOf('…')>=0)return true;
+    if(item.text&&item.text.indexOf('展开全文')>=0)return true;
+    return false;
+  }
+
+  for(var p=1;p<=MAX_PAGES;p++){
+    console.log('  第'+p+'页...');
+    var data=await fetchPage(p);
+    if(!data||!data.data){console.log('  停止');break;}
+    var list=data.data.list||data.data;
+    if(!Array.isArray(list)||list.length===0)break;
+
+    var pagePosts=[];
+    for(var i=0;i<list.length;i++){
+      var item=list[i];
+      if(!inRange(item.created_at))continue;
+
+      var text=(item.text_raw||item.text||'').replace(/<[^>]*>/g,'').trim();
+      if(isLong(item)&&item.id){
+        var full=await fetchLongText(item.id);
+        if(full&&full.length>text.length)text=full;
+      }
+
+      var retweeted=null;
+      if(item.retweeted_status){
+        var rt=item.retweeted_status;
+        retweeted={user:rt.user?rt.user.screen_name:'',text:(rt.text_raw||rt.text||'').replace(/<[^>]*>/g,'').trim(),images:[]};
+      }
+
+      pagePosts.push({
+        id:item.id||item.mid||'', text:text, images:[],
+        time:item.created_at||'', retweeted:retweeted,
+        reposts_count:item.reposts_count||0,
+        comments_count:item.comments_count||0,
+        attitudes_count:item.attitudes_count||0
+      });
+    }
+
+    allPosts=allPosts.concat(pagePosts);
+    console.log('  本页'+pagePosts.length+'条,累计'+allPosts.length+'条');
+    window.scrollTo(0,document.body.scrollHeight);
+    await sleep(SCROLL_DELAY);
+  }
+
+  var result={uid:uid,crawl_time:new Date().toISOString(),total_posts:allPosts.length,posts:allPosts};
+  var blob=new Blob([JSON.stringify(result,null,2)],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download='weibo_'+uid+'_'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  console.log('\\n✅ 完成！共'+allPosts.length+'条微博');
+  console.log('📁 文件已下载到 Chrome 下载目录');
+  return allPosts;
+})();`;
+
+  document.getElementById('generatedCode').textContent = code;
+}
+
+// 页面加载时自动生成
+generateCode();
+
+// ====== 复制代码 ======
+function copyCode() {
+  var code = document.getElementById('generatedCode').textContent;
+  navigator.clipboard.writeText(code).then(function() {
+    var s = document.getElementById('copyStatus');
+    s.style.display = 'block';
+    setTimeout(function(){ s.style.display = 'none'; }, 2000);
+  }).catch(function() {
+    // Fallback
+    var ta = document.createElement('textarea');
+    ta.value = code; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    alert('已复制！');
+  });
+}
+
+// ====== JSON 文件处理 ======
+var uploadedData = null;
+
+function handleFileUpload(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+
+  var label = document.getElementById('fileLabel');
+  label.classList.add('has-file');
+  document.getElementById('fileLabelText').textContent = '📄 ' + file.name;
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      uploadedData = JSON.parse(e.target.result);
+
+      if (!uploadedData.posts || !Array.isArray(uploadedData.posts)) {
+        showStatus('uploadStatus', '❌ JSON 格式错误：缺少 posts 数组', 'error');
+        return;
+      }
+
+      var posts = uploadedData.posts;
+      var dates = {};
+      var withImgs = 0;
+      for (var i = 0; i < posts.length; i++) {
+        var d = parseDateStr(posts[i].time);
+        if (d) dates[d] = (dates[d] || 0) + 1;
+        if (posts[i].images && posts[i].images.length > 0) withImgs++;
+      }
+      var sortedDates = Object.keys(dates).sort();
+
+      // 显示统计
+      var statsHTML = '';
+      statsHTML += '<div class="stat-card"><div class="num">' + posts.length + '</div><div class="label">微博总数</div></div>';
+      statsHTML += '<div class="stat-card"><div class="num">' + (sortedDates.length || '—') + '</div><div class="label">日期跨度</div></div>';
+      statsHTML += '<div class="stat-card"><div class="num">' + (sortedDates.length > 0 ? sortedDates[0] : '—') + '</div><div class="label">最早</div></div>';
+      statsHTML += '<div class="stat-card"><div class="num">' + (sortedDates.length > 0 ? sortedDates[sortedDates.length-1] : '—') + '</div><div class="label">最晚</div></div>';
+
+      document.getElementById('statsContainer').innerHTML = statsHTML;
+      document.getElementById('fileStats').style.display = 'block';
+      document.getElementById('convertSection').style.display = 'block';
+
+      // 自动计算起始序号
+      var firstDate = sortedDates[0] || '';
+      var lastSeqInput = document.getElementById('outputSeq');
+      if (firstDate && !lastSeqInput.value) {
+        lastSeqInput.placeholder = '例如: 04509（基于日期 ' + firstDate + '）';
+      }
+
+      showStatus('uploadStatus', '✅ 读取成功！共 ' + posts.length + ' 条微博', 'success');
+
+    } catch(err) {
+      showStatus('uploadStatus', '❌ JSON 解析失败: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function parseDateStr(t) {
+  if (!t) return '';
+  var p = t.split(' ');
+  if (p.length >= 6) {
+    var m = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+    return p[5] + '.' + (m[p[1]]||'00') + '.' + p[2].padStart(2, '0');
+  }
+  return '';
+}
+
+// ====== JSON → Markdown 转换 ======
+function convertToMarkdown() {
+  if (!uploadedData) {
+    showStatus('convertStatus', '❌ 请先上传 JSON 文件', 'error');
+    return;
+  }
+
+  var posts = uploadedData.posts;
+  var fmt = document.getElementById('filenameFormat').value;
+  var sig = document.getElementById('dateSignature').value;
+  var userSeq = document.getElementById('outputSeq').value.trim();
+
+  // 按时间排序
+  posts.sort(function(a, b) {
+    return parseDateStr(a.time).localeCompare(parseDateStr(b.time));
+  });
+
+  // 确定起始序号
+  var startSeq = 1;
+  if (userSeq) {
+    startSeq = parseInt(userSeq) || 1;
+  }
+
+  // 生成文件
+  var files = [];
+  var showProgress = document.getElementById('convertProgress');
+  var progressFill = document.getElementById('progressFill');
+  showProgress.style.display = 'block';
+
+  for (var i = 0; i < posts.length; i++) {
+    var post = posts[i];
+    var dateStr = parseDateStr(post.time);
+    if (!dateStr) continue;
+
+    var seq = startSeq + i;
+    var text = (post.text || '').trim();
+    if (!text) continue;
+
+    // 文件名
+    var fname = '';
+    switch(fmt) {
+      case 'standard': fname = '微博-' + dateStr + '-' + String(seq).padStart(5,'0') + '.md'; break;
+      case 'simple': fname = dateStr + '-' + String(seq).padStart(5,'0') + '.md'; break;
+      case 'numbered': fname = String(seq).padStart(5,'0') + '-' + dateStr + '.md'; break;
+    }
+
+    // 日期签名
+    var body = text;
+    if (sig === 'append') {
+      body = text + ' - ' + dateStr;
+    }
+
+    // Markdown 内容
+    var md = '---\n' +
+      'type: 微博\n' +
+      'date: ' + dateStr + '\n' +
+      'tags: []\n' +
+      'description: ""\n' +
+      '---\n\n' +
+      body + '\n';
+
+    files.push({name: fname, content: md});
+
+    // 更新进度
+    var pct = Math.round((i+1)/posts.length*100);
+    progressFill.style.width = pct + '%';
+  }
+
+  showProgress.style.display = 'none';
+
+  if (files.length === 0) {
+    showStatus('convertStatus', '❌ 没有可转换的微博', 'error');
+    return;
+  }
+
+  // 生成 ZIP 并下载
+  if (typeof JSZip !== 'undefined') {
+    var zip = new JSZip();
+    var dirName = document.getElementById('outputDir').value.trim() || '微博备份_导出';
+    var folder = zip.folder(dirName);
+
+    for (var fi = 0; fi < files.length; fi++) {
+      folder.file(files[fi].name, files[fi].content, {binary: false});
+    }
+
+    zip.generateAsync({type: 'blob'}).then(function(content) {
+      saveAs(content, dirName + '.zip');
+      showStatus('convertStatus', '✅ 成功生成 ' + files.length + ' 个文件，已下载 ZIP', 'success');
+    });
+  } else {
+    // 后备方案：直接下载每个文件（简单但繁琐）
+    showStatus('convertStatus', '⚠️ JSZip 库未加载，请检查网络连接。正在逐个下载...', 'info');
+    for (var fi2 = 0; fi2 < Math.min(5, files.length); fi2++) {
+      (function(idx) {
+        setTimeout(function() {
+          var blob = new Blob([files[idx].content], {type: 'text/markdown;charset=utf-8'});
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url; a.download = files[idx].name;
+          document.body.appendChild(a); a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, idx * 500);
+      })(fi2);
+    }
+    if (files.length > 5) {
+      showStatus('convertStatus', '⚠️ 已下载前5个文件，剩余 ' + (files.length-5) + ' 个因浏览器限制需分批处理', 'info');
+    }
+  }
+}
+
+// ====== 通用状态显示 ======
+function showStatus(id, msg, type) {
+  var el = document.getElementById(id);
+  el.className = 'status-bar ' + (type || 'info');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ====== 拖拽上传支持 ======
+document.addEventListener('DOMContentLoaded', function() {
+  var dropZone = document.getElementById('fileLabel');
+  dropZone.addEventListener('dragover', function(e) { e.preventDefault(); });
+  dropZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    var file = e.dataTransfer.files[0];
+    if (file) {
+      document.getElementById('jsonFileInput').files = e.dataTransfer.files;
+      handleFileUpload({target: {files: [file]}});
+    }
+  });
+});
+</script>
+</body>
+</html>
