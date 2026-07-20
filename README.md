@@ -124,5 +124,3 @@ description: ""
 ## 📜 开源协议
 
 MIT
-# Git push test Mon Jul 20 21:54:38 CST 2026
-# Push test without embedded token Mon Jul 20 21:54:56 CST 2026
